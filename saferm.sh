@@ -1,240 +1,231 @@
 #!/bin/bash
 #This is a bash script.
 
-#create a .Trash_saferm directory
-
 home="$HOME"
 trashSafermDirName=".Trash_saferm"
 trashSafermPath="$home/$trashSafermDirName"
-currentItem=$1
+vOption=0
+rOption=0
+dOption=0
+ROption=0
 
-
-trashsafermfunction(){
-    if [ ! -d "$HOME/.Trash_saferm" ];
+#this dynamically creates a trash folder for saferm
+trashSafermFunction(){
+    if [ ! -d "$trashSafermPath" ];
     then
-        mkdir "$HOME/.Trash_saferm"
-        echo "$trashSafeDirName created"
-    else
-        echo "$trashSafeDirName already exists"
+        mkdir "$trashSafermPath"
+        echo "$trashSafermPath created"
     fi
 }
 
-
-#recursivelycheckingdirectory(){
-#    for files in "$1"/*
-#    do
-#        read "Do you want to delete "$1"/* ? " reply
-#        if [[ "$reply" == 'y' || "$reply" == 'Y' ]]
-#        then
-#
-#    #if the next item is a subdirectory
-#    elif [[ ]
-
-
-#making if statements for the interactive thing
-#first check if it is file or a directory
-#FOR FILES
-
-ifUserReplyYesFiles() {
+#creating a function for the yes reply
+ifUserReplyYes() {
   reply=$1
-
   if [[ "$reply" == y* || "$reply" == Y* ]]
   then
-    mv $2 $trashSafermPath
-    #kind of implementing the -v option by calling the name of the file and displaying that it has been deleted
-    echo "$2 has been removed"
+    true
   else
-    echo "$2 has not been removed"
+    false
   fi
-
 }
 
-if [[ -f "$1" ]]
-then
+#THE FUNCTION FOR RECOVERING FILES AND DIRECTORIES FROM TRASH
+
+recoveryOptionFunction () {
+
+  checkTrashCount=$(ls -l "$trashSafermPath" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d' | wc -l | xargs)
+  checkTrashList=$(ls -l "$trashSafermPath" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d')
+  #recovery for files
+  #in the .trash, directories and files are the same.
+  if [[ ! -f "$1" ]]
+  then
+    item=$1
+    pathTrackerDir=".trackPaths"
+    itemPathInTrash=$trashSafermPath/$item
+    itemPath=$(dirname $item)
+    if [[ $checkTrashCount -gt 0 ]]
+    then
+      mv $itemPathInTrash $itemPath
+      echo "$itemPathInTrash recovered"
+    fi
+  fi
+}
+
+#function for deleting files
+actionForFile() {
     read -p "remove $1? " reply
-    filename=$1
-    ifUserReplyYesFiles $reply $filename
-
-fi
-
-#FOR DIRECTORIES
-
-#$1=first command line argument (in this case representing a DIRECTORY)
-# currentItemInDir=$item
-# currentItemInDirPath=$1/$currentItemInDir
-
-dirItemsCount=$(ls -l "$1" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d' | wc -l | xargs)
-dirItemsList=$(ls -l "$1" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d')
-
-recursiveProcessForFilesInDir() {
-  #loop through files in the directory
-  for item in $dirItemsList
-  do
-    #if the current item in the iteration is a file
-    if [[ -f "$1/$item" ]]
+    ifUserReplyYes $reply
+    if [[ $? -eq true ]]
     then
-        read -p "remove $1/$item? " reply
-          if [[ "$reply" == y* || "$reply" == Y* ]]
-          then
-              mv $currentItemInDirPath $trashSafermPath
-          else
-              echo "File not removed"
-          fi
-    done
+      mv $1 $trashSafermPath
+    else
+      false
+    fi
 }
 
-recursiveProcessInDir() {
-  #loop through files in the directory
-  for item in $dirItemsList
-  do
-    #if the current item in the iteration is a file
-    if [[ -f "$1/$item" ]]
-    then
-        read -p "remove $1/$item? " reply
-          if [[ "$reply" == y* || "$reply" == Y* ]]
-          then
-            # echo "$1/$item removed"
-              mv $currentItemInDirPath $trashSafermPath
-          else
-              echo "File not removed"
-    #if the current item in the iteration is a directory (sub directory),
-    elif [[ -d "$1/$item" ]]
-    then
-        read -p "examine contents in $1/$item? " reply
-            if [[ "$reply" == y* || "$reply" == Y* ]]
+#function for action in directories
+recursiveProcessForDir() {
+    read -p "examine files in directory $1? " reply
+    ifUserReplyYes $reply
+      #if they want to examine the directory
+      if [[ $? -eq true ]]
+      then
+        #current directory path is going to be the first argument passed into the function
+        currentDirPath=$1
+        #this lists the contents of the directory
+        dirItemsList=$(ls -l "$currentDirPath" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d')
+
+        checkIfDirEmpty $currentDirPath
+
+        #if the directory is empty
+        if [[ $? -eq true ]]
+        then
+          actionForFile $currentDirPath
+
+        #if the directory is not empty
+        else
+          #loop through files in the directory
+          for item in $dirItemsList
+          do
+
+            #if the current item in the iteration is a file
+            if [[ -f "$currentDirPath/$item" ]]
             then
-                currItem=$1/$item
-                presentDir=$currentItem/$currItem
-                read -p "examine contents in $presentDir?" reply
-                  if [[ "$reply" == y* || "$reply" == Y* ]]
-                  then
-                    recursiveProcessForFilesInDir $presentDir
+                actionForFile $currentDirPath/$item
+            else
+              recursiveProcessForDir $currentDirPath/$item
+            fi
 
-
-
+          done
+          #this is to ignore the "." (hidden files) in a directory
+          if [ "$currentDirPath"  != "." ]
+          then
+            #delete the parent dir
+            actionForFile $currentDirPath
           fi
+        fi
+        #this gives the directory name of the current directory path
+        currentDirPath=$(dirname $currentDirPath)
+      fi
 }
 
-#checking the contents in the DIRECTORY
-checkForDirs () {
+#this checks for contents in directories
+checkIfDirEmpty () {
+
+  dirItemsCount=$(ls -l "$1" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d' | wc -l | xargs)
+
   if [[ $dirItemsCount -gt 0 ]]
   then
-      echo "Directory not empty"
-      read -p "Examine contents in $1? " reply
-
-
+      false
+  else
+      true
+  fi
 }
 
-if [[ -d "$1" ]]
+trashSafermFunction
+
+#==========================================================================================================================================
+#implementing the -v(verbose), -r(recursive), -d(remove directories) flags.
+while getopts ":vrdR" opt; do
+
+  case "$opt" in
+    #verbose option
+    v)
+      #if the v option is being used
+      vOption=1
+      ;;
+
+    #recursive option
+    r)
+      #if the r option is being used
+      rOption=1
+      ;;
+    #remove directories option
+    d)
+      #if the d option is being used
+      dOption=1
+      ;;
+    #recovery option (to recover files/directories from trash and place them in their origin location )
+    R)
+      #if the R option is being used
+      ROption=1
+      ;;
+    #if an option that does not exist is provided i.e in this case, an option that is not -v,-r or -d
+    \?)
+      echo "script usage: incorrect option: "-$1" "
+      ;;
+  esac
+done
+#OPTIND is the index of the next argument to be processed (the starting index is 1).
+shift "$(($OPTIND -1))"
+
+#===============================================================================================================
+#FOR FILES
+#actual action for files
+#if the item in the argument is a file
+if [[ -f "$1" ]]
 then
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                                cdir=$1/$item
-
-
-                                  if [[ "$reply" == y* || "$reply" == Y* ]]
-                                  then
-                                      echo "$cdir examined"
-                                  fi
-
-                              fi
-                      fi          # mv $thing $trashSafermPath
-                    done
-                fi
-        fi
+  if [[ "$dOption" -eq 1 ]]
+  then
+    actionForFile $1
+  fi
+  if [[ "$rOption" -eq 1 ]]
+  then
+      actionForFile $1
+  fi
+  if [[ "$vOption" -eq 1 ]]
+  then
+    actionForFile $1
+    echo "$1"
+  fi
 fi
 
-              #ask whether to delete the file in the iteration
-              # read -p "Do you want to delete $thing?" reply
-              #
-              # if [[ "$reply" == y* || "$reply" == Y* ]]
-              # then
-              #
-              #
-              #
-              #   fi
-              #
-              #     mv $currentItemInDirPath $trashSafermPath
-              # else
-              #     echo "File or Directory not removed"
-              #
-              #     #check if the directory is empty.
-              #     if [[ $dirItemsCount -eq 0 ]]
-              #     then
-              #         echo "Directory is empty"
-              #         #move the directory to trash saferm
-              #         mv $1 $trashSafermPath
-              #     fi
-              #
-              # fi
-#               done
-#           fi
-#     #if the reply is anything other than y*, go back to the parent directory (..)
-#     else
-#         cd ..
-#     fi
-# fi
+#================================================================================================================
+#FOR DIRECTORIES
+#actual action for directories
+#if the item in the argument is a directory
+if [[ -d "$1" ]]
+then
+    if [[ "$dOption" -eq 1 ]]
+    then
+      checkIfDirEmpty $1
+        #if directory is empty
+        if [[ $? -eq true ]]
+        then
+          actionForFile $1
+        else
+          echo "saferm: $1: directory not empty"
+        fi
+    fi
 
+    if [[ "$rOption" -eq 1 ]]
+    then
+      recursiveProcessForDir $1
+    fi
 
+    if [[ "$vOption" -eq 1 ]]
+    then
+      echo "saferm: $1: is a directory"
+    fi
+fi
 
-# handleSubDirs () {
-#   for thing in $dirItemsList
-#   do
-#     #ask whether to delete the current file in the iteration
-#     read -p "Do you want to delete $thing?" reply
-#
-#       if [[ "$reply" == y* || "$reply" == Y* ]]
-#       then
-#           mv $1/$thing $trashSafermPath
-#
-#
-#
-# }
+if [[ $ROption -eq 1 ]]
+then
+  recoveryOptionFunction $1
+fi
 
-# if [[ -d "$1" ]]
+#if the argument is passed without an option
+if [[ -f "$1" ]] && [[ "$vOption" -eq 0 ]] && [[ "$rOption" -eq 0 ]] && [[ "$dOption" -eq 0 ]]
+then
+  actionForFile $1
+elif [[ ! -f "$1" ]] && [[ "$vOption" -eq 0 ]] && [[ "$rOption" -eq 0 ]] && [[ "$dOption" -eq 0 ]]
+then
+  echo "saferm: $1: is a directory"
+fi
+
+#=======================================================================================================================
+#if the current item in the iteration is neither a file nor directory (if the current item does not exist)
+# if ! [[ -f "$1" || -d "$1" ]]
 # then
-#     dirItemsCount=$(ls -l "$1" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d' | wc -l | xargs)
-#     dirItemsList=$(ls -l "$1" | sort -k1,1 | awk -F " " '{print $NF}' | sed -e '$ d')
-#     read -p "Do you want to examine the $1? " reply
-#
-#     if [[ "$reply" == y* || "$reply" == Y* ]]
-#     then
-#         #check the contents of the directory before removing
-#         if [[ $recursiveCheck -eq 0 ]]
-#         then
-#             echo "Directory empty"
-#             #move the directory to .trash
-#             mv $itemPath $trashSafermPath
-#             echo "Directory has been removed"
-#
-#             #if the contents of the directory is greater than 0
-#         elif [ $recursiveCheck -gt 0 ]
-#         then
-#             echo "$1 directory not empty!"
-#             for thing in "$recursiveCheckList/$currentDir"
-#             {
-#                 echo "$thing"
-#                 read -p "Do you want to remove $thing?" reply
-#                     if [[ "$reply" == y* || "$reply" == Y* ]]
-#                     then
-#                         mv $thing $trashSafermPath
-#                         echo "$thing has been removed"
-#                     fi
-#             }
-#
-#         fi
-#     fi
+#   echo "$1: No such file or directory"
 # fi
-#
