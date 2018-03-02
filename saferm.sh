@@ -1,5 +1,5 @@
 #!/bin/bash
-#This is a bash script.
+#This is a bash script which acts like the rm command but is interactive by default
 
 home="$HOME"
 trashSafermDirName=".Trash_saferm"
@@ -201,6 +201,7 @@ then
     if [[ "$rOption" -eq 1 ]]
     then
       recursiveProcessForDir $1
+      currentDirPath=$(dirname $currentDirPath)
     fi
 
     if [[ "$vOption" -eq 1 ]]
@@ -209,6 +210,7 @@ then
     fi
 fi
 
+#if the recovery option is being used
 if [[ $ROption -eq 1 ]]
 then
   recoveryOptionFunction $1
@@ -218,14 +220,7 @@ fi
 if [[ -f "$1" ]] && [[ "$vOption" -eq 0 ]] && [[ "$rOption" -eq 0 ]] && [[ "$dOption" -eq 0 ]]
 then
   actionForFile $1
-elif [[ ! -f "$1" ]] && [[ "$vOption" -eq 0 ]] && [[ "$rOption" -eq 0 ]] && [[ "$dOption" -eq 0 ]]
+elif [[ -d "$1" ]] && [[ "$vOption" -eq 0 ]] && [[ "$rOption" -eq 0 ]] && [[ "$dOption" -eq 0 ]]
 then
   echo "saferm: $1: is a directory"
 fi
-
-#=======================================================================================================================
-#if the current item in the iteration is neither a file nor directory (if the current item does not exist)
-# if ! [[ -f "$1" || -d "$1" ]]
-# then
-#   echo "$1: No such file or directory"
-# fi
